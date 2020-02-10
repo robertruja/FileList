@@ -1,7 +1,9 @@
 package com.gigi;
 
 import java.io.*;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -11,10 +13,11 @@ public class FileListImpl implements FileList {
     private long maxBytes;
     private String chunk = "chunk_";
 
-    private static final String tempPath = "C:\\tmp\\";
+    private String tempPath;
 
-    public FileListImpl(int maxMemory) { // megs
+    public FileListImpl(int maxMemory, String tempPath) { // megs
         maxBytes = MEGABYTES * maxMemory;
+        this.tempPath = tempPath;
     }
 
     public File intersect(File leftFile, File rightFile) {
@@ -24,7 +27,7 @@ public class FileListImpl implements FileList {
 
         File leftChunksDir = splitFile(leftFile);
         File rightChunksDir = splitFile(rightFile);
-        File destination = new File(tempPath + "\\" + leftFile.getName() + "_" + rightFile.getName() + ".out");
+        File destination = new File(tempPath + "\\" + leftFile.getName() + "_" + rightFile.getName() + ".intersect.out");
         try(BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(destination)))) {
             for (File leftChunk : leftChunksDir.listFiles()) {
                 Set<String> leftLines = loadFromFile(leftChunk);
@@ -51,6 +54,39 @@ public class FileListImpl implements FileList {
         deleteDir(leftChunksDir); // cleanup
         deleteDir(rightChunksDir); // cleanup
         return destination;
+    }
+
+    public File uniqueRows(File input) {
+        fileExists(input);
+        File chunksDir = splitFile(input);
+        File destination = new File(tempPath + "\\" + input.getName() + ".unique.out");
+        try(BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(destination)))) {
+            File[] allFiles = chunksDir.listFiles();
+            Set<String> left = null;
+            for (int i = 0; i < allFiles.length; i++) {
+                left = loadFromFile(allFiles[i]);
+                for (int j = i + 1; j < allFiles.length; j++) {
+                    Set<String> right = loadFromFile(allFiles[j]);
+                    right.forEach(left::remove);
+                }
+                writeLines(left, writer);
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        deleteDir(chunksDir); // cleanup
+        return destination;
+    }
+
+    public void writeLines(Collection<String> lines, BufferedWriter writer) {
+        lines.forEach(line -> {
+            try {
+                writer.write(line);
+                writer.newLine();
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+        });
     }
 
     public File diff(File input, File destination) {
@@ -127,20 +163,7 @@ public class FileListImpl implements FileList {
 
 
     public static void main(String[] args) throws Exception {
-        File file1 = new File("C:\\tmp\\test.txt");
-        File file2 = new File("C:\\tmp\\test2.txt");
-//        try(BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(new FileOutputStream(file)))){
-//            for (int i = 500000; i < 1500000; i++) {
-//                if(i%100 == 0) {
-//                    writer.write("test_word_" + i);
-//                    writer.newLine();
-//                }
-//            }
-//        } catch (Exception ex) {
-//            throw new RuntimeException(ex);
-//        }
-
-        FileList fileList = new FileListImpl(1);
-        fileList.intersect(file2, file1);
+        FileList fileList = new FileListImpl(250, "E:\\words\\dict\\out\\tmp");
+        fileList.intersect(new File("E:\\words\\dict\\out\\raw.txt"), new File("E:\\words\\dict\\out\\tmp\\sub_rockyou.txt.unique.out"));
     }
 }
